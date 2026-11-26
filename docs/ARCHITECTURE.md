@@ -1,9 +1,11 @@
 # Architecture
 
-WHAPPNUS AI ORCHESTRATOR is a stateless service. WHAPPNUS remains the system of record for tenants, users, conversations, knowledge, billing and WhatsApp delivery.
+WHAPPNUS AI ORCHESTRATOR is a stateless, independent generation service. WHAPPNUS remains the system of record for users, tenants, conversations, agents, knowledge, CRM, billing and WhatsApp delivery.
 
-The foundation separates API contracts, deterministic routing, provider adapters and security/observability. Credentials stay server-side.
+The service has independent provider adapters for Gemini, OpenAI and Anthropic; deterministic task classification; capability-aware model routing; bounded retries; Retry-After handling; fallback; and per-process circuit breakers. Model identifiers, model budgets, fallback order and explicit pricing rates are environment-configurable.
 
-Implemented foundation: FastAPI/OpenAPI, Gemini/OpenAI/Anthropic adapter boundaries, configurable model IDs, deterministic task tier selection, provider fallback order and server-to-server API key authentication.
+Redis provides atomic organization-scoped rate limits and one-time HMAC nonce storage shared across app replicas. Provider metrics are exported in Prometheus format without organization labels. The Railway project contains separate app and Redis services.
 
-Not yet implemented: distributed rate limiting, detailed provider error taxonomy, circuit breakers, token-aware context compaction, cost catalogue, metrics export and full multimodal payload contracts.
+Supported request modalities currently include text for all providers, images for all three, audio for Gemini, and PDF documents for Gemini/Anthropic. Unsupported modality/provider combinations are excluded by routing.
+
+No Ollama, local inference runtime, local model download or dependency on the legacy router is part of this service.
