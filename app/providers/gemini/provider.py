@@ -15,7 +15,7 @@ class GeminiProvider(BaseProvider):
     def validate_configuration(self):
         return self.is_configured
     def get_capabilities(self):
-        return {"provider": self.name, "models": [self.settings.gemini_flash_model, self.settings.gemini_advanced_model], "capabilities": ["text", "image", "audio", "document"], "configured": self.is_configured}
+        return {"provider": self.name, "models": [self.settings.gemini_flash_model, self.settings.gemini_advanced_model] + ([self.settings.default_model] if self.settings.default_provider == self.name and self.settings.default_model else []), "capabilities": ["text", "image", "audio", "document"], "configured": self.is_configured}
     async def health_check(self):
         return {"provider": self.name, "available": self.is_configured, "status": "configured" if self.is_configured else "missing_credentials"}
     async def generate(self, *, model, messages, system, max_tokens, temperature):
