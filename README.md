@@ -1,54 +1,32 @@
 # WHAPPNUS AI ORCHESTRATOR
 
-Independent multi-provider AI orchestration service for the WHAPPNUS SaaS platform.
+Independent multi-provider AI orchestration service for WHAPPNUS. It has no Ollama, local model runtime or dependency on the legacy router.
 
-## Current status
+## Runtime architecture
 
-Foundation branch: `feat/orchestrator-foundation`.
+- Python 3.12, FastAPI and Pydantic Settings.
+- Independent Gemini, OpenAI and Anthropic adapters using official SDKs.
+- Provider/model IDs, fallback order, per-model token limits and prices are environment-configurable.
+- Redis-backed organization rate limits; process-local limiting is development-only.
+- Timestamped HMAC tenant signatures plus a server-to-server API key.
+- Provider-specific error normalization, bounded retries, Retry-After handling and per-process circuit breakers.
+- Prometheus-compatible aggregate metrics.
+- Docker and Railway deployment support.
 
-This is an active build, not a production-ready release. The initial commit establishes the FastAPI application, request/response contracts, Gemini/OpenAI/Anthropic adapter boundaries, deterministic routing, basic fallback, server-to-server API-key authentication, Docker/Railway configuration and initial tests.
+## API
 
-## Stack
+- `GET /health`: public liveness.
+- `GET /ready`: readiness summary.
+- `GET /v1/providers` and `GET /v1/providers/health`.
+- `GET /v1/metrics`: authenticated aggregate Prometheus metrics.
+- `POST /v1/chat/completions`, `/estimate`, `/validate`.
 
-- Python 3.12
-- FastAPI + Pydantic Settings
-- Official Google GenAI, OpenAI and Anthropic SDKs
-- Pytest and Ruff
-- Docker; Railway-compatible dynamic `PORT`
-
-## Quick start
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env
-# Set ORCHESTRATOR_API_KEY and at least one provider API key in .env
-uvicorn app.main:app --reload
-```
-
-API docs: `http://localhost:8000/docs`.
-
-## Routes
-
-- `GET /health` (public liveness)
-- `GET /ready` (provider readiness summary)
-- `GET /v1/providers`
-- `GET /v1/providers/health`
-- `POST /v1/chat/completions`
-- `POST /v1/chat/estimate`
-- `POST /v1/chat/validate`
-
-All `/v1/*` routes require `X-Orchestrator-Key`.
+All `/v1/*` routes require `X-Orchestrator-Key`. Tenant-scoped routes additionally require `X-Tenant-Timestamp` and `X-Tenant-Signature`. See `docs/INTEGRATION_WHAPPNUS.md`.
 
 ## Configuration
 
-See `.env.example`. Provider credentials are optional at startup. Providers without credentials are reported as unavailable; no simulated completions are returned. Model identifiers are environment-configurable.
+See `.env.example`. Production requires `ORCHESTRATOR_API_KEY`, `TENANT_SIGNING_SECRET`, `REDIS_URL`, and at least one provider key. Provider prices are never guessed: `MODEL_PRICING_JSON` is empty by default and only estimates costs for explicitly configured rates. Per-model budgets use `MODEL_LIMITS_JSON`.
 
-## Important production gaps
+## Validation status
 
-The current foundation is not yet approved for production. Distributed rate limiting, tenant-scoped quotas, circuit breakers, precise provider error classification, bounded retries/backoff, token-aware context management, cost accounting, structured tracing/metrics, multimodal content contracts and comprehensive security tests remain future implementation work. The initial adapters are text-only and must not be treated as proof of vision/audio/PDF support.
-
-## Architecture and integration
-
-See `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/PROVIDERS.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md` and `docs/INTEGRATION_WHAPPNUS.md`.
+This branch is under active hardening. CI tests and Docker build are being expanded. Provider calls against real paid APIs and live multimodal payloads require valid credentials and separate acceptance tests. Text-only adapter behavior must not be mistaken for image/audio/PDF support.
