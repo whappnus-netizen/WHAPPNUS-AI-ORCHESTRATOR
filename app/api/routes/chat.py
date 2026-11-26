@@ -36,8 +36,15 @@ async def completions(body: ChatRequest, x_tenant_timestamp: str | None = Header
 async def estimate(body: EstimateRequest, x_tenant_timestamp: str | None = Header(default=None), x_tenant_nonce: str | None = Header(default=None), x_tenant_signature: str | None = Header(default=None)):
     await authorize_tenant(body.organization_id, x_tenant_timestamp, x_tenant_nonce, x_tenant_signature)
     tokens = estimate_messages_tokens([m.model_dump() for m in body.messages])
-    provider = settings.default_provider
-    model = settings.default_model or (settings.gemini_flash_model if provider == "gemini" else settings.openai_model if provider == "openai" else settings.anthropic_model)
+    provider = (body.preferred_provider or settings.default_provider).lower()
+    provider_adapter = providers.get(provider)
+    if provider_adapter is None:
+        raise HTTPException(status_code=422, detail={"code": "UNKNOWN_PROVIDER"})
+    model = body.preferred_model or (settings.default_model if provider == settings.default_provider and settings.default_model else None)
+    if not model:
+        model = settings.gemini_flash_model if provider == "gemini" else settings.openai_model if provider == "openai" else settings.anthropic_model
+    if model not in provider_adapter.get_capabilities().get("models", []):
+        raise HTTPException(status_code=422, detail={"code": "MODEL_NOT_CONFIGURED"})
     limits = model_limits(settings, provider, model)
     try:
         catalogue = json.loads(settings.model_pricing_json or "{}")
