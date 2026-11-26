@@ -5,6 +5,7 @@ from app.core.context_manager import fit_context
 from app.core.cost_manager import estimate_cost
 from app.core.errors import NoProviderAvailable, ProviderError
 from app.core.model_limits import model_limits
+from app.core.token_manager import estimate_tokens
 from app.core.router import select_candidates
 from app.observability.request_metrics import ERRORS, FALLBACKS, LATENCY, REQUESTS
 from app.utils.retries import backoff
@@ -25,7 +26,11 @@ class Orchestrator:
                 continue
             limits = model_limits(self.settings, provider.name, model)
             try:
-                messages = fit_context([m.model_dump() for m in body.messages], min(limits["max_input_tokens"], self.settings.max_input_tokens))
+                system_tokens = estimate_tokens(body.system_instructions or "")
+                available_input = min(limits["max_input_tokens"], self.settings.max_input_tokens) - system_tokens
+                if available_input < 1:
+                    raise ValueError("System instructions exceed the configured input context budget.")
+                messages = fit_context([m.model_dump() for m in body.messages], available_input)
             except ValueError as exc:
                 raise ProviderError("CONTEXT_TOO_LARGE", str(exc), fallback_allowed=False) from exc
             output_limit = min(body.max_tokens, limits["max_output_tokens"], self.settings.max_output_tokens)
