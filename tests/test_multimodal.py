@@ -26,3 +26,25 @@ def test_gemini_translator_builds_inline_image_part():
     contents = gemini_content([{"role":"user","content":[image_part()]}], None)
     assert contents[0].role == "user"
     assert contents[0].parts[0].inline_data.mime_type == "image/png"
+
+def audio_part():
+    return {"type":"audio","mime_type":"audio/mpeg","data":base64.b64encode(b"fake-audio").decode()}
+
+def pdf_part():
+    return {"type":"document","mime_type":"application/pdf","data":base64.b64encode(b"%PDF-fake").decode()}
+
+def test_gemini_translator_builds_audio_and_pdf_parts():
+    from app.providers.multimodal import gemini_content
+    audio = gemini_content([{"role":"user","content":[audio_part()]}], None)
+    pdf = gemini_content([{"role":"user","content":[pdf_part()]}], None)
+    assert audio[0].parts[0].inline_data.mime_type == "audio/mpeg"
+    assert pdf[0].parts[0].inline_data.mime_type == "application/pdf"
+
+def test_anthropic_translator_builds_pdf_document_block():
+    result = anthropic_content([pdf_part()])
+    assert result[0]["type"] == "document"
+    assert result[0]["source"]["media_type"] == "application/pdf"
+
+def test_openai_translator_refuses_unsupported_audio():
+    with pytest.raises(ValueError):
+        openai_content([audio_part()])
