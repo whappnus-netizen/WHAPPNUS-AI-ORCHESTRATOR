@@ -8,9 +8,11 @@ def openai_content(content):
         item = part.model_dump() if hasattr(part, "model_dump") else part
         if item["type"] == "text":
             parts.append({"type": "text", "text": item["text"]})
-        else:
+        elif item["type"] == "image":
             uri = f"data:{item['mime_type']};base64,{item['data']}"
             parts.append({"type": "image_url", "image_url": {"url": uri, "detail": "auto"}})
+        else:
+            raise ValueError(f"OpenAI adapter does not support {item['type']} content.")
     return parts
 
 def anthropic_content(content):
@@ -21,8 +23,12 @@ def anthropic_content(content):
         item = part.model_dump() if hasattr(part, "model_dump") else part
         if item["type"] == "text":
             parts.append({"type": "text", "text": item["text"]})
-        else:
+        elif item["type"] == "image":
             parts.append({"type": "image", "source": {"type": "base64", "media_type": item["mime_type"], "data": item["data"]}})
+        elif item["type"] == "document":
+            parts.append({"type": "document", "source": {"type": "base64", "media_type": item["mime_type"], "data": item["data"]}})
+        else:
+            raise ValueError(f"Anthropic adapter does not support {item['type']} content.")
     return parts
 
 def gemini_content(messages, system):
