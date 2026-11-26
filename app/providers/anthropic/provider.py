@@ -1,4 +1,5 @@
 from app.core.errors import ProviderError
+from app.core.provider_errors import normalize_provider_exception
 from app.providers.base import BaseProvider
 
 class AnthropicProvider(BaseProvider):
@@ -16,7 +17,9 @@ class AnthropicProvider(BaseProvider):
     async def generate(self, *, model, messages, system, max_tokens, temperature):
         if not self.client: raise ProviderError('PROVIDER_UNAVAILABLE','Anthropic credentials are not configured.')
         try:
-            response=await self.client.messages.create(model=model,max_tokens=max_tokens,temperature=temperature,system=system or '',messages=messages)
+            # Anthropic accepts only user/assistant messages; system instructions are a separate field.
+            clean=[m for m in messages if m['role'] in ('user','assistant')]
+            response=await self.client.messages.create(model=model,max_tokens=max_tokens,temperature=temperature,system=system or '',messages=clean)
             content='\n'.join(block.text for block in response.content if hasattr(block,'text'))
             return {'provider':self.name,'model':model,'content':content,'finish_reason':response.stop_reason,'usage':{'input_tokens':response.usage.input_tokens,'output_tokens':response.usage.output_tokens}}
-        except Exception as exc: raise ProviderError('PROVIDER_REQUEST_FAILED',type(exc).__name__,True) from exc
+        except Exception as exc: raise normalize_provider_exception(exc) from exc

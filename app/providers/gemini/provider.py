@@ -1,4 +1,5 @@
 from app.core.errors import ProviderError
+from app.core.provider_errors import normalize_provider_exception
 from app.providers.base import BaseProvider
 
 class GeminiProvider(BaseProvider):
@@ -25,4 +26,4 @@ class GeminiProvider(BaseProvider):
             usage=getattr(response, 'usage_metadata', None)
             return {'provider':self.name,'model':model,'content':response.text or '', 'finish_reason':'stop', 'usage':{'input_tokens':getattr(usage,'prompt_token_count',None),'output_tokens':getattr(usage,'candidates_token_count',None)}}
         except Exception as exc:
-            raise ProviderError('PROVIDER_REQUEST_FAILED', type(exc).__name__, True) from exc
+            raise normalize_provider_exception(exc) from exc

@@ -1,4 +1,5 @@
 from app.core.errors import ProviderError
+from app.core.provider_errors import normalize_provider_exception
 from app.providers.base import BaseProvider
 
 class OpenAIProvider(BaseProvider):
@@ -20,4 +21,4 @@ class OpenAIProvider(BaseProvider):
             response=await self.client.chat.completions.create(model=model,messages=payload,max_tokens=max_tokens,temperature=temperature)
             choice=response.choices[0]
             return {'provider':self.name,'model':model,'content':choice.message.content or '', 'finish_reason':choice.finish_reason,'usage':{'input_tokens':response.usage.prompt_tokens if response.usage else None,'output_tokens':response.usage.completion_tokens if response.usage else None}}
-        except Exception as exc: raise ProviderError('PROVIDER_REQUEST_FAILED',type(exc).__name__,True) from exc
+        except Exception as exc: raise normalize_provider_exception(exc) from exc
