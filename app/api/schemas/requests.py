@@ -4,25 +4,31 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class ContentPart(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: Literal["text", "image"]
+    type: Literal["text", "image", "audio", "document"]
     text: str | None = Field(default=None, max_length=200000)
-    data: str | None = Field(default=None, max_length=7000000)
-    mime_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"] | None = None
+    data: str | None = Field(default=None, max_length=21000000)
+    mime_type: str | None = None
 
     @model_validator(mode="after")
     def validate_payload(self):
         if self.type == "text":
             if not self.text or self.data is not None or self.mime_type is not None:
                 raise ValueError("Text parts require text only.")
-        else:
-            if not self.data or not self.mime_type or self.text is not None:
-                raise ValueError("Image parts require base64 data and a supported image MIME type.")
-            try:
-                decoded = base64.b64decode(self.data, validate=True)
-            except Exception as exc:
-                raise ValueError("Image data must be valid base64.") from exc
-            if not decoded or len(decoded) > 5 * 1024 * 1024:
-                raise ValueError("Image payload must be between 1 byte and 5 MB.")
+            return self
+        allowed = {
+            "image": {"image/jpeg", "image/png", "image/webp", "image/gif"},
+            "audio": {"audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/webm", "audio/flac"},
+            "document": {"application/pdf"},
+        }
+        limits = {"image": 5, "audio": 15, "document": 10}
+        if not self.data or self.mime_type not in allowed[self.type] or self.text is not None:
+            raise ValueError(f"{self.type.title()} parts require base64 data and a supported MIME type.")
+        try:
+            decoded = base64.b64decode(self.data, validate=True)
+        except Exception as exc:
+            raise ValueError("Media data must be valid base64.") from exc
+        if not decoded or len(decoded) > limits[self.type] * 1024 * 1024:
+            raise ValueError(f"{self.type.title()} payload exceeds its size limit.")
         return self
 
 class Message(BaseModel):
