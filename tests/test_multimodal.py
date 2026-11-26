@@ -20,3 +20,9 @@ def test_message_rejects_invalid_base64_image():
 def test_message_rejects_unsupported_mime_type():
     with pytest.raises(ValidationError):
         Message(role="user", content=[{"type":"image","mime_type":"application/pdf","data":base64.b64encode(b"x").decode()}])
+
+def test_gemini_translator_builds_inline_image_part():
+    from app.providers.multimodal import gemini_content
+    contents = gemini_content([{"role":"user","content":[image_part()]}], None)
+    assert contents[0].role == "user"
+    assert contents[0].parts[0].inline_data.mime_type == "image/png"
