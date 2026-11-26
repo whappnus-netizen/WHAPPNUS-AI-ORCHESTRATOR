@@ -6,7 +6,7 @@ class Provider:
     def __init__(self, name, capabilities):
         self.name, self.capabilities, self.is_configured = name, capabilities, True
     def get_capabilities(self):
-        return {"capabilities": self.capabilities}
+        return {"capabilities": self.capabilities, "models": {"gemini": ["gemini-2.5-flash", "gemini-2.5-pro"], "openai": ["gpt-4.1-mini"], "anthropic": ["claude-sonnet-4-5"]}[self.name]}
 
 class Registry:
     def __init__(self):
