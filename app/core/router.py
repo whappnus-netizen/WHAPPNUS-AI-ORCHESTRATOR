@@ -19,15 +19,21 @@ def select_candidates(body, registry, settings):
         provider = registry.get(name)
         if not provider or not provider.is_configured:
             continue
-        model = body.preferred_model if name == requested and body.preferred_model else None
-        if not model:
-            if name == "gemini":
-                model = settings.gemini_advanced_model if tier == "advanced" else settings.gemini_flash_model
-            elif name == "openai":
-                model = settings.openai_model
-            else:
-                model = settings.anthropic_model
-        capabilities = provider.get_capabilities().get("capabilities", [])
+        advertised = provider.get_capabilities()
+        available_models = advertised.get("models", [])
+        if name == requested and body.preferred_model:
+            model = body.preferred_model
+        elif name == requested and settings.default_model:
+            model = settings.default_model
+        elif name == "gemini":
+            model = settings.gemini_advanced_model if tier == "advanced" else settings.gemini_flash_model
+        elif name == "openai":
+            model = settings.openai_model
+        else:
+            model = settings.anthropic_model
+        if model not in available_models:
+            continue
+        capabilities = advertised.get("capabilities", [])
         if any(capability not in capabilities for capability in required):
             continue
         candidates.append((provider, model))
