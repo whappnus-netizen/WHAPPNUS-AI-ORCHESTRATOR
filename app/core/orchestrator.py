@@ -1,10 +1,11 @@
 import asyncio
 import json
+import time
 from app.core.context_manager import fit_context
+from app.core.cost_manager import estimate_cost
 from app.core.errors import NoProviderAvailable, ProviderError
 from app.core.model_limits import model_limits
 from app.core.router import select_candidates
-from app.core.cost_manager import estimate_cost
 from app.observability.request_metrics import ERRORS, FALLBACKS, LATENCY, REQUESTS
 from app.utils.retries import backoff
 
@@ -31,9 +32,11 @@ class Orchestrator:
             for attempt in range(self.settings.max_retries + 1):
                 if provider.name not in attempted:
                     attempted.append(provider.name)
+                started = time.perf_counter()
                 try:
                     async with asyncio.timeout(self.settings.request_timeout_seconds):
                         result = await provider.generate(model=model, messages=messages, system=body.system_instructions, max_tokens=output_limit, temperature=body.temperature)
+                    LATENCY.labels(provider.name).observe(time.perf_counter() - started)
                     breaker.record_success()
                     usage = result.get("usage") or {}
                     try:
@@ -47,7 +50,6 @@ class Orchestrator:
                     result["fallback_used"] = len(attempted) > 1
                     result["fallback_chain"] = attempted.copy()
                     REQUESTS.labels(provider.name, "success").inc()
-                    LATENCY.labels(provider.name).observe(0)
                     if result["fallback_used"]:
                         FALLBACKS.inc()
                     return result
@@ -55,6 +57,7 @@ class Orchestrator:
                     error = ProviderError("PROVIDER_TIMEOUT", "Provider request timed out.", True)
                 except ProviderError as exc:
                     error = exc
+                LATENCY.labels(provider.name).observe(time.perf_counter() - started)
                 last_error = error
                 ERRORS.labels(provider.name, error.code).inc()
                 if error.retryable:
