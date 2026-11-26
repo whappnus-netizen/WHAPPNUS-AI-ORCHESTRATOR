@@ -15,7 +15,7 @@ class AnthropicProvider(BaseProvider):
     def validate_configuration(self):
         return self.is_configured
     def get_capabilities(self):
-        return {"provider": self.name, "models": [self.settings.anthropic_model], "capabilities": ["text", "image"], "configured": self.is_configured}
+        return {"provider": self.name, "models": [self.settings.anthropic_model], "capabilities": ["text", "image", "document"], "configured": self.is_configured}
     async def health_check(self):
         return {"provider": self.name, "available": self.is_configured, "status": "configured" if self.is_configured else "missing_credentials"}
     async def generate(self, *, model, messages, system, max_tokens, temperature):
