@@ -1,0 +1,9 @@
+services:
+  orchestrator:
+    build: .
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      PORT: 8000
+    restart: unless-stopped
