@@ -1,17 +1,19 @@
 # Providers
 
-Configure credentials and model identifiers through environment variables. Gemini exposes independent Flash and Advanced IDs. OpenAI and Anthropic model IDs are independently configurable. The selected provider and model can be changed without changing the orchestration contract.
+Configure credentials and model identifiers through environment variables. Gemini exposes independent Flash and Advanced IDs. OpenAI and Anthropic model IDs are independently configurable. Provider selection is capability-aware: a provider is only considered when it supports every modality present in the request.
 
-## Implemented capabilities
+## Implemented input capabilities
 
-- Text input: all three adapters.
-- Image input: all three adapters accept validated base64 image parts for JPEG, PNG, WebP and GIF, up to 5 MB per image.
-- Provider SDKs receive native image content blocks; image bytes are never logged.
-- The image contract is covered by adapter translation tests. Live paid-provider image calls still require credentials and must be acceptance-tested in the provider accounts.
+- Text: Gemini, OpenAI and Anthropic.
+- Images: all three adapters; JPEG, PNG, WebP and GIF, base64, maximum 5 MB per image.
+- Audio: Gemini adapter; MPEG, WAV, OGG, MP4, WebM and FLAC, base64, maximum 15 MB per audio part.
+- PDF documents: Gemini and Anthropic adapters; base64, maximum 10 MB per document.
+- Payloads are translated into provider-native content blocks. Binary data is not written to logs.
+- Schema validation and adapter payload translation are covered by automated tests. This is not yet a live paid-provider acceptance test; real API calls still require provider credentials.
 
 ## Not yet implemented
 
-Audio, video, PDF/document extraction, URL fetching and provider-native tool calling are not currently advertised as supported. Do not send these payloads as if they were supported.
+Video, remote URL fetching, audio output, speech generation and provider-native tool calling are not currently supported.
 
 ## Model configuration
 
