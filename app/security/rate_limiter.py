@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 from collections import defaultdict, deque
 from fastapi import HTTPException
@@ -18,21 +19,22 @@ class OrganizationRateLimiter:
         self._lock = asyncio.Lock()
 
     async def check(self, organization_id: str) -> tuple[int, int]:
+        digest = hashlib.sha256(organization_id.encode()).hexdigest()
         if self.redis_url:
             if self._redis is None:
                 from redis.asyncio import Redis
                 self._redis = Redis.from_url(self.redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
-            key = f"whappnus:orchestrator:rate:{organization_id}"
+            key = f"whappnus:orchestrator:rate:{digest}"
             try:
                 count, ttl = await self._redis.eval(self._SCRIPT, 1, key, self.window_seconds)
             except Exception as exc:
-                raise HTTPException(status_code=503, detail={"code":"RATE_LIMIT_STORE_UNAVAILABLE"}) from exc
+                raise HTTPException(status_code=503, detail={"code": "RATE_LIMIT_STORE_UNAVAILABLE"}) from exc
             return int(count), max(1, int(ttl))
         if self.environment.lower() in {"production", "prod"}:
-            raise HTTPException(status_code=503, detail={"code":"DISTRIBUTED_RATE_LIMIT_NOT_CONFIGURED"})
+            raise HTTPException(status_code=503, detail={"code": "DISTRIBUTED_RATE_LIMIT_NOT_CONFIGURED"})
         now = time.monotonic()
         async with self._lock:
-            bucket = self._local[organization_id]
+            bucket = self._local[digest]
             while bucket and now - bucket[0] >= self.window_seconds:
                 bucket.popleft()
             bucket.append(now)
@@ -41,5 +43,4 @@ class OrganizationRateLimiter:
     async def enforce(self, organization_id: str) -> None:
         count, retry_after = await self.check(organization_id)
         if count > self.limit:
-            raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)}, detail={"code":"ORGANIZATION_RATE_LIMIT_EXCEEDED","retry_after":retry_after})
-
+            raise HTTPException(status_code=429, headers={"Retry-After": str(retry_after)}, detail={"code": "ORGANIZATION_RATE_LIMIT_EXCEEDED", "retry_after": retry_after})
