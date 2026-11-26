@@ -10,7 +10,7 @@ class FakeProvider:
         self.error = error
         self.response = response or {"provider": name, "model": "fake-model", "content": "ok", "usage": {}}
     def get_capabilities(self):
-        return {"capabilities": ["text"]}
+        return {"capabilities": ["text"], "models": {"gemini": ["gemini-2.5-flash", "gemini-2.5-pro"], "openai": ["gpt-4.1-mini"], "anthropic": ["claude-sonnet-4-5"]}[self.name]}
     async def generate(self, **kwargs):
         if self.error:
             raise self.error
