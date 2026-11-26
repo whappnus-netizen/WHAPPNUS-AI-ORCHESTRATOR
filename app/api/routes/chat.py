@@ -27,7 +27,7 @@ async def completions(body: ChatRequest, x_tenant_timestamp: str | None = Header
         result = await Orchestrator(providers, settings).run(body)
     except Exception as exc:
         if hasattr(exc, "code"):
-            raise HTTPException(status_code=503, detail={"code": exc.code, "request_id": request_id}) from exc
+            raise HTTPException(status_code=503, headers={"Retry-After": str(exc.retry_after_seconds)} if getattr(exc, "retry_after_seconds", None) else None, detail={"code": exc.code, "request_id": request_id}) from exc
         raise
     return ChatResponse(request_id=request_id, provider=result["provider"], model=result["model"], content=result["content"], finish_reason=result.get("finish_reason"), usage=result.get("usage", {}), latency_ms=(time.perf_counter() - started) * 1000, fallback_used=result.get("fallback_used", False), fallback_chain=result.get("fallback_chain", []))
 
