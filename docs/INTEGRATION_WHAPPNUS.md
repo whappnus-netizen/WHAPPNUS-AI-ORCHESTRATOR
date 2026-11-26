@@ -5,9 +5,10 @@ WHAPPNUS remains the system of record for users, organization membership, agents
 Every versioned API request must include:
 - `X-Orchestrator-Key`: server-to-server API key; never expose it in browsers.
 - `X-Tenant-Timestamp`: Unix timestamp in seconds.
-- `X-Tenant-Signature`: lowercase hex HMAC-SHA256 of `{organization_id}:{timestamp}`, using the shared `TENANT_SIGNING_SECRET`.
+- `X-Tenant-Nonce`: a cryptographically random one-time value of 16–128 characters.
+- `X-Tenant-Signature`: lowercase hex HMAC-SHA256 of `{organization_id}:{timestamp}:{nonce}`, using the shared `TENANT_SIGNING_SECRET`.
 
-The orchestrator rejects signatures older than five minutes and applies a Redis-backed fixed-window quota per organization. The WHAPPNUS backend must still authenticate the user and verify organization membership before signing a request.
+The orchestrator rejects signatures older than five minutes, rejects reused nonces through Redis, and applies an atomic Redis-backed fixed-window quota per organization. The WHAPPNUS backend must authenticate the user and verify organization membership before signing a request.
 
 Example request body:
 
