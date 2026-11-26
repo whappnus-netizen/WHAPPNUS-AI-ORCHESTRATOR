@@ -1,10 +1,15 @@
 # WHAPPNUS integration
 
-The WHAPPNUS backend remains responsible for authentication, organization membership, agent instructions, conversation history, knowledge, commercial credits and WhatsApp delivery.
+WHAPPNUS remains the system of record for users, organization membership, agents, conversation history, knowledge, credits, CRM and WhatsApp delivery. This service only performs provider orchestration.
 
-Call `POST /v1/chat/completions` server-to-server with `X-Orchestrator-Key`. Never expose this key to a browser or WhatsApp client.
+Every versioned API request must include:
+- `X-Orchestrator-Key`: server-to-server API key; never expose it in browsers.
+- `X-Tenant-Timestamp`: Unix timestamp in seconds.
+- `X-Tenant-Signature`: lowercase hex HMAC-SHA256 of `{organization_id}:{timestamp}`, using the shared `TENANT_SIGNING_SECRET`.
 
-Example body:
+The orchestrator rejects signatures older than five minutes and applies a Redis-backed fixed-window quota per organization. The WHAPPNUS backend must still authenticate the user and verify organization membership before signing a request.
+
+Example request body:
 
 ```json
 {
@@ -19,4 +24,4 @@ Example body:
 }
 ```
 
-The organization identifier is correlation/tenant context, not an authorization claim. The caller must validate tenant access before making the request.
+Keep the API key and tenant signing secret in backend secret storage only. Never send either secret to a browser, WhatsApp client or customer.
