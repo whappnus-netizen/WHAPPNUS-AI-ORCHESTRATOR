@@ -63,6 +63,8 @@ class ChatRequest(BaseModel):
 
 class EstimateRequest(BaseModel):
     organization_id: str = Field(min_length=1, max_length=128)
+    preferred_provider: str | None = None
+    preferred_model: str | None = None
     messages: list[Message] = Field(min_length=1, max_length=100)
     max_tokens: int = Field(default=1024, ge=1, le=16384)
 
