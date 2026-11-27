@@ -55,7 +55,6 @@ function Invoke-OrchestratorSmokeTest {
         conversation_id = $ConversationId
         task_type = $TaskType
         preferred_provider = "gemini"
-        preferred_model = "gemini-3.1-flash-lite"
         system_instructions = $SystemInstructions
         messages = @(@{ role = "user"; content = $Prompt })
         capabilities_required = @("text")
