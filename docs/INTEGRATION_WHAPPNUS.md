@@ -25,4 +25,9 @@ Example request body:
 }
 ```
 
+
+## Routing and time budget
+
+The default Gemini tier is `gemini-3.8-flash`; requests classified as complex use `gemini-3.1-pro-preview` unless the backend explicitly selects another configured model. The overall request deadline defaults to 22 seconds (`TOTAL_REQUEST_TIMEOUT_SECONDS`), even though the per-provider attempt timeout defaults to 45 seconds. This keeps provider retries and fallback inside the WHAPPNUS backend's 25-second request budget and the Netlify worker's 28-second callback budget. The Orchestrator returns a retryable deadline error when the total budget expires; the backend may then place the generation on its durable queue.
+
 Keep the API key and tenant signing secret in backend secret storage only. Never send either secret to a browser, WhatsApp client or customer.
