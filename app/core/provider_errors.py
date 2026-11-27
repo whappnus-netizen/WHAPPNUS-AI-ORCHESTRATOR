@@ -4,9 +4,9 @@ from app.core.errors import ProviderError
 
 
 _SECRET_PATTERNS = (
-    re.compile(r"(?i)bearer\\s+[A-Za-z0-9._~+/-]+=*"),
-    re.compile(r"\\bsk-[A-Za-z0-9_-]{12,}\\b"),
-    re.compile(r"\\bAIza[0-9A-Za-z_-]{20,}\\b"),
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/-]+=*"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
 )
 
 
