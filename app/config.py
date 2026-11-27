@@ -11,9 +11,11 @@ class Settings(BaseSettings):
     tenant_signing_secret: SecretStr = SecretStr("")
     redis_url: SecretStr = SecretStr("")
     gemini_api_key: SecretStr = SecretStr("")
-    # Use current Gemini model identifiers for new deployments; do not rely on legacy 2.5 model IDs.
-    gemini_flash_model: str = "gemini-3.8-flash"
+    # The primary model is deliberately independent of the legacy GEMINI_FLASH_MODEL variable.
+    # This avoids an old production override silently selecting a model with unstable availability.
+    gemini_primary_model: str = "gemini-3.1-flash-lite"
     gemini_advanced_model: str = "gemini-3.1-pro-preview"
+    gemini_advanced_enabled: bool = False
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     anthropic_api_key: SecretStr = SecretStr("")
@@ -21,10 +23,12 @@ class Settings(BaseSettings):
     default_provider: str = "gemini"
     default_model: str = ""
     enable_fallback: bool = True
-    fallback_provider_order: str = "openai,anthropic"
+    # Fallback providers are opt-in: add only providers with verified quota/billing.
+    fallback_provider_order: str = ""
     request_timeout_seconds: float = Field(default=45, gt=0, le=300)
     total_request_timeout_seconds: float = Field(default=22, gt=0, le=120)
     max_retries: int = Field(default=2, ge=0, le=5)
+    max_rate_limit_retries: int = Field(default=1, ge=0, le=2)
     rate_limit_per_minute: int = Field(default=60, ge=1, le=100000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     max_input_tokens: int = Field(default=100000, ge=1000)
