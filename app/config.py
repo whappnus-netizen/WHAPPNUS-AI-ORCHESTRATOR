@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_port: int = 8000
     orchestrator_api_key: SecretStr = SecretStr("")
     tenant_signing_secret: SecretStr = SecretStr("")
+    tenant_body_signature_required: bool = False
     redis_url: SecretStr = SecretStr("")
     gemini_api_key: SecretStr = SecretStr("")
     # The primary model is deliberately independent of the legacy GEMINI_FLASH_MODEL variable.
