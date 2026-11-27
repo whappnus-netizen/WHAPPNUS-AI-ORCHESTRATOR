@@ -2,6 +2,7 @@ from functools import lru_cache
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
     app_env: str = "development"
@@ -10,8 +11,10 @@ class Settings(BaseSettings):
     tenant_signing_secret: SecretStr = SecretStr("")
     redis_url: SecretStr = SecretStr("")
     gemini_api_key: SecretStr = SecretStr("")
-    gemini_flash_model: str = "gemini-2.5-flash"
-    gemini_advanced_model: str = "gemini-2.5-pro"
+    # Gemini 2.5 access is restricted for projects without prior active usage.
+    # 3.8 Flash is the current stable default for new Gemini API integrations.
+    gemini_flash_model: str = "gemini-3.8-flash"
+    gemini_advanced_model: str = "gemini-3.8-flash"
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     anthropic_api_key: SecretStr = SecretStr("")
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
     @property
     def fallback_order(self) -> list[str]:
         return [item.strip().lower() for item in self.fallback_provider_order.split(",") if item.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
