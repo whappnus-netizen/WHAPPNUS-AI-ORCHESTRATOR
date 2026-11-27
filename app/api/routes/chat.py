@@ -104,10 +104,15 @@ async def estimate(
     )
     if not model:
         model = (
-            settings.gemini_flash_model if provider == "gemini"
+            settings.gemini_primary_model if provider == "gemini"
             else settings.openai_model if provider == "openai"
             else settings.anthropic_model
         )
+    if provider == "gemini":
+        if model in {"gemini-2.5-flash", "gemini-3.8-flash"}:
+            model = settings.gemini_primary_model
+        if not settings.gemini_advanced_enabled and model == settings.gemini_advanced_model:
+            model = settings.gemini_primary_model
     if model not in provider_adapter.get_capabilities().get("models", []):
         raise HTTPException(status_code=422, detail={"code": "MODEL_NOT_CONFIGURED"})
     limits = model_limits(settings, provider, model)
