@@ -1,4 +1,6 @@
 from app.core.classifier import classify_task
+from app.core.errors import ProviderError
+
 
 def select_candidates(body, registry, settings):
     tier = classify_task(body.task_type, [message.model_dump() for message in body.messages])
@@ -7,9 +9,11 @@ def select_candidates(body, registry, settings):
     for message in body.messages:
         if isinstance(message.content, list):
             required.update(part.type for part in message.content if part.type != "text")
+
     order = [requested]
     if settings.enable_fallback:
         order += settings.fallback_order + ["gemini", "openai", "anthropic"]
+
     seen = set()
     candidates = []
     for name in order:
@@ -19,6 +23,7 @@ def select_candidates(body, registry, settings):
         provider = registry.get(name)
         if not provider or not provider.is_configured:
             continue
+
         advertised = provider.get_capabilities()
         available_models = advertised.get("models", [])
         if name == requested and body.preferred_model:
@@ -31,8 +36,17 @@ def select_candidates(body, registry, settings):
             model = settings.openai_model
         else:
             model = settings.anthropic_model
+
         if model not in available_models:
+            if name == requested and (body.preferred_model or settings.default_model):
+                raise ProviderError(
+                    "MODEL_NOT_CONFIGURED",
+                    "The explicitly requested model is not advertised by the selected provider.",
+                    fallback_allowed=False,
+                    provider=name,
+                )
             continue
+
         capabilities = advertised.get("capabilities", [])
         if any(capability not in capabilities for capability in required):
             continue
