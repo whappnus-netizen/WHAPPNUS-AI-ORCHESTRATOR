@@ -12,7 +12,7 @@ class Provider:
 
     def get_capabilities(self):
         models = {
-            "gemini": ["gemini-3.8-flash"],
+            "gemini": ["gemini-3.1-flash-lite"],
             "openai": ["gpt-4.1-mini"],
             "anthropic": ["claude-sonnet-4-5"],
         }
