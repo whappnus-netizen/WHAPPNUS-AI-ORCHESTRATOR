@@ -12,11 +12,23 @@ if ([string]::IsNullOrWhiteSpace($env:TENANT_SECRET)) {
 }
 
 function New-TenantHeaders {
-    param([Parameter(Mandatory=$true)][string]$OrganizationId)
+    param(
+        [Parameter(Mandatory=$true)][string]$OrganizationId,
+        [Parameter(Mandatory=$true)][byte[]]$BodyBytes
+    )
 
     $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds().ToString()
     $nonce = [guid]::NewGuid().ToString("N")
-    $hmacMessage = $OrganizationId + ":" + $timestamp + ":" + $nonce
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bodyHashBytes = $sha.ComputeHash($BodyBytes)
+        $bodyHash = [System.BitConverter]::ToString($bodyHashBytes).Replace("-", "").ToLower()
+    }
+    finally {
+        $sha.Dispose()
+    }
+
+    $hmacMessage = "POST:/v1/chat/completions:" + $OrganizationId + ":" + $timestamp + ":" + $nonce + ":" + $bodyHash
     $hmac = [System.Security.Cryptography.HMACSHA256]::new(
         [Text.Encoding]::UTF8.GetBytes($env:TENANT_SECRET)
     )
@@ -34,6 +46,7 @@ function New-TenantHeaders {
         "X-Tenant-Id" = $OrganizationId
         "X-Tenant-Timestamp" = $timestamp
         "X-Tenant-Nonce" = $nonce
+        "X-Tenant-Body-SHA256" = $bodyHash
         "X-Tenant-Signature" = $signature
     }
 }
@@ -63,7 +76,10 @@ function Invoke-OrchestratorSmokeTest {
         metadata = @{ smoke_test = $true; label = $Label }
     }
 
-    $response = Invoke-RestMethod -Method POST -Uri "$BaseUrl/v1/chat/completions" -Headers (New-TenantHeaders -OrganizationId $OrganizationId) -ContentType "application/json" -Body ($payload | ConvertTo-Json -Depth 12) -TimeoutSec 60
+    $bodyJson = $payload | ConvertTo-Json -Depth 12 -Compress
+    $bodyBytes = [Text.Encoding]::UTF8.GetBytes($bodyJson)
+    $headers = New-TenantHeaders -OrganizationId $OrganizationId -BodyBytes $bodyBytes
+    $response = Invoke-RestMethod -Method POST -Uri "$BaseUrl/v1/chat/completions" -Headers $headers -ContentType "application/json" -Body $bodyBytes -TimeoutSec 60
 
     if ($response.provider -ne "gemini") {
         throw ($Label + ": provider inesperado: " + $response.provider)
