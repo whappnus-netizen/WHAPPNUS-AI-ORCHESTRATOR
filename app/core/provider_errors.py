@@ -93,7 +93,7 @@ def normalize_provider_exception(exc: Exception, provider: str | None = None) ->
                 for detail in details:
                     if not isinstance(detail, dict) or not str(detail.get("@type", "")).endswith("RetryInfo"):
                         continue
-                    match = re.fullmatch(r"\\s*(\\d+(?:\\.\\d+)?)s\\s*", str(detail.get("retryDelay", "")))
+                    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)s\s*", str(detail.get("retryDelay", "")))
                     if match:
                         retry_after = min(30.0, max(0.0, float(match.group(1))))
                         break
