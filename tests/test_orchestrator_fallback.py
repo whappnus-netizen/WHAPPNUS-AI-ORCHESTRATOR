@@ -1,3 +1,5 @@
+import asyncio
+
 from app.api.schemas.requests import ChatRequest
 from app.config import Settings
 from app.core.errors import ProviderError
@@ -74,6 +76,31 @@ def test_complex_task_selects_distinct_gemini_advanced_model():
     )
     candidates = select_candidates(body, registry, settings)
     assert candidates[0][1] == "gemini-3.1-pro-preview"
+
+
+async def test_total_request_deadline_bounds_provider_and_fallback_work():
+    settings = Settings(
+        _env_file=None,
+        gemini_api_key="configured",
+        openai_api_key="configured",
+        request_timeout_seconds=10,
+        total_request_timeout_seconds=0.05,
+        max_retries=0,
+        fallback_provider_order="openai",
+    )
+
+    class SlowProvider(FakeProvider):
+        async def generate(self, **kwargs):
+            await asyncio.sleep(0.2)
+            return dict(self.response)
+
+    registry = FakeRegistry([SlowProvider("gemini"), FakeProvider("openai")])
+    try:
+        await Orchestrator(registry, settings).run(request())
+        assert False, "expected total deadline error"
+    except ProviderError as error:
+        assert error.code == "ORCHESTRATOR_DEADLINE_EXCEEDED"
+        assert error.retryable is True
 
 async def test_auth_failure_falls_back_to_another_provider():
     settings = Settings(_env_file=None, gemini_api_key="configured", openai_api_key="configured", max_retries=0, fallback_provider_order="openai")
