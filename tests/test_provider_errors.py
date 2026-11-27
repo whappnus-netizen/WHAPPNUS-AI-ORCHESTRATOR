@@ -6,6 +6,27 @@ class RateLimitError(Exception):
     response = type("Response", (), {"headers": {"retry-after": "7"}})()
 
 
+class QuotaExhaustedError(Exception):
+    status_code = 429
+    body = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "You exceeded your current quota. Quota exceeded for metric; limit: 0; Free Tier.",
+            "details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure"}],
+        }
+    }
+
+
+class InsufficientCreditsError(Exception):
+    status_code = 400
+    body = {
+        "error": {
+            "type": "invalid_request_error",
+            "message": "Your credit balance is too low to access the Anthropic API.",
+        }
+    }
+
+
 class UnauthorizedError(Exception):
     status_code = 401
 
@@ -27,6 +48,21 @@ def test_rate_limit_is_retryable_and_retry_after_is_parsed():
     assert error.retryable is True
     assert error.retry_after_seconds == 7
     assert error.provider == "openai"
+
+
+def test_zero_quota_is_not_retried_but_allows_fallback():
+    error = normalize_provider_exception(QuotaExhaustedError(), provider="gemini")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
+    assert error.fallback_allowed is True
+    assert error.provider_error_code == "RESOURCE_EXHAUSTED"
+
+
+def test_insufficient_provider_credits_are_not_retried():
+    error = normalize_provider_exception(InsufficientCreditsError(), provider="anthropic")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
+    assert error.fallback_allowed is True
 
 
 def test_auth_error_is_not_retried_but_can_fallback():
