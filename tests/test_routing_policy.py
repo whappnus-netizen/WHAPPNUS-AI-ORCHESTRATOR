@@ -120,3 +120,33 @@ def test_only_explicitly_allowlisted_fallback_providers_are_candidates():
         make_settings(fallback_order=["openai"]),
     )
     assert [provider.name for provider, _ in candidates] == ["gemini", "openai"]
+
+
+class FakeSecret:
+    def get_secret_value(self):
+        return ""
+
+
+def test_provider_advertises_only_flash_lite_until_advanced_mode_is_enabled():
+    from app.providers.gemini.provider import GeminiProvider
+
+    settings = make_settings()
+    settings.gemini_api_key = FakeSecret()
+    settings.default_provider = "gemini"
+    settings.default_model = ""
+    provider = GeminiProvider(settings)
+    assert provider.get_capabilities()["models"] == ["gemini-3.1-flash-lite"]
+
+
+def test_provider_advertises_gemini_pro_after_explicit_advanced_activation():
+    from app.providers.gemini.provider import GeminiProvider
+
+    settings = make_settings(advanced_enabled=True)
+    settings.gemini_api_key = FakeSecret()
+    settings.default_provider = "gemini"
+    settings.default_model = ""
+    provider = GeminiProvider(settings)
+    assert provider.get_capabilities()["models"] == [
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-preview",
+    ]
