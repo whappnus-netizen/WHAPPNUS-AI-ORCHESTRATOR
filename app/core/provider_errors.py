@@ -31,7 +31,6 @@ def _is_quota_exhausted(provider_code: object, provider_type: object, message: s
     error_type = str(provider_type or "").lower()
     text = (message or "").lower()
     hard_quota_codes = {
-        "resource_exhausted",
         "insufficient_quota",
         "billing_hard_limit_reached",
         "quota_exceeded",
@@ -43,7 +42,11 @@ def _is_quota_exhausted(provider_code: object, provider_type: object, message: s
         return True
     if "limit: 0" in text and ("quota" in text or "free tier" in text):
         return True
-    if "exceeded your current quota" in text and "rate limit" not in text:
+    # RESOURCE_EXHAUSTED can mean a short per-minute limit, not an exhausted plan.
+    # Only treat it as a hard quota when the daily quota is exhausted or the limit is zero.
+    if code == "resource_exhausted" and "per day" in text and "quota" in text:
+        return True
+    if "exceeded your current quota" in text and ("per day" in text or "limit: 0" in text):
         return True
     return error_type == "insufficient_quota"
 
@@ -82,7 +85,18 @@ def normalize_provider_exception(exc: Exception, provider: str | None = None) ->
     retry_after = None
     try:
         raw_retry = headers.get("retry-after")
-        retry_after = min(30.0, max(0.0, float(raw_retry))) if raw_retry is not None else None
+        if raw_retry is not None:
+            retry_after = min(30.0, max(0.0, float(raw_retry)))
+        else:
+            details = body.get("details", [])
+            if isinstance(details, list):
+                for detail in details:
+                    if not isinstance(detail, dict) or not str(detail.get("@type", "")).endswith("RetryInfo"):
+                        continue
+                    match = re.fullmatch(r"\\s*(\\d+(?:\\.\\d+)?)s\\s*", str(detail.get("retryDelay", "")))
+                    if match:
+                        retry_after = min(30.0, max(0.0, float(match.group(1))))
+                        break
     except (TypeError, ValueError, AttributeError):
         retry_after = None
 
