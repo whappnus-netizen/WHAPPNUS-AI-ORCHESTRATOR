@@ -23,6 +23,7 @@ class Orchestrator:
 
         attempted = []
         last_error = None
+        deadline = time.monotonic() + self.settings.total_request_timeout_seconds
         for provider, model in candidates:
             breaker = self.registry.breaker(provider.name)
             if breaker.is_open:
@@ -42,9 +43,19 @@ class Orchestrator:
             for attempt in range(self.settings.max_retries + 1):
                 if provider.name not in attempted:
                     attempted.append(provider.name)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    last_error = ProviderError(
+                        "ORCHESTRATOR_DEADLINE_EXCEEDED",
+                        "The total Orchestrator request deadline was exceeded.",
+                        retryable=True,
+                        fallback_allowed=True,
+                        provider=provider.name,
+                    )
+                    break
                 started = time.perf_counter()
                 try:
-                    async with asyncio.timeout(self.settings.request_timeout_seconds):
+                    async with asyncio.timeout(min(self.settings.request_timeout_seconds, remaining)):
                         result = await provider.generate(
                             model=model,
                             messages=messages,
@@ -94,9 +105,10 @@ class Orchestrator:
                     return result
 
                 except TimeoutError:
+                    deadline_exceeded = time.monotonic() >= deadline
                     error = ProviderError(
-                        "PROVIDER_TIMEOUT",
-                        "Provider request timed out.",
+                        "ORCHESTRATOR_DEADLINE_EXCEEDED" if deadline_exceeded else "PROVIDER_TIMEOUT",
+                        "The total Orchestrator request deadline was exceeded." if deadline_exceeded else "Provider request timed out.",
                         retryable=True,
                         fallback_allowed=True,
                         provider=provider.name,
