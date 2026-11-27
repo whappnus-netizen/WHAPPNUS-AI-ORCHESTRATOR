@@ -16,7 +16,7 @@ class FakeProvider:
 
     def get_capabilities(self):
         models = {
-            "gemini": ["gemini-3.8-flash", "gemini-3.1-pro-preview"],
+            "gemini": ["gemini-3.1-flash-lite", "gemini-3.1-pro-preview"],
             "openai": ["gpt-4.1-mini"],
             "anthropic": ["claude-sonnet-4-5"],
         }
@@ -62,11 +62,24 @@ def test_simple_task_selects_gemini_flash_model():
     registry = FakeRegistry([FakeProvider("gemini")])
     body = request()
     candidates = select_candidates(body, registry, settings)
-    assert candidates[0][1] == "gemini-3.8-flash"
+    assert candidates[0][1] == "gemini-3.1-flash-lite"
 
 
-def test_complex_task_selects_distinct_gemini_advanced_model():
-    settings = Settings(_env_file=None, gemini_api_key="configured")
+def test_complex_task_uses_flash_lite_while_advanced_mode_is_disabled():
+    settings = Settings(_env_file=None, gemini_api_key="configured", gemini_advanced_enabled=False)
+    registry = FakeRegistry([FakeProvider("gemini")])
+    body = ChatRequest(
+        organization_id="org-test",
+        preferred_provider="gemini",
+        task_type="complex",
+        messages=[{"role": "user", "content": "Analisa detalhadamente esta situação."}],
+    )
+    candidates = select_candidates(body, registry, settings)
+    assert candidates[0][1] == "gemini-3.1-flash-lite"
+
+
+def test_complex_task_selects_gemini_pro_only_when_advanced_mode_is_enabled():
+    settings = Settings(_env_file=None, gemini_api_key="configured", gemini_advanced_enabled=True)
     registry = FakeRegistry([FakeProvider("gemini")])
     body = ChatRequest(
         organization_id="org-test",
