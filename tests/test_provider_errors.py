@@ -87,3 +87,20 @@ def test_model_not_found_is_not_retried_but_allows_fallback():
     assert error.retryable is False
     assert error.fallback_allowed is True
     assert error.provider_request_id == "provider-request-123"
+
+
+class ProviderErrorWithSecret(Exception):
+    status_code = 400
+    body = {
+        "error": {
+            "type": "invalid_request_error",
+            "message": "Rejected request for Bearer abcdefghijklmnopqrstuvwxyz and sk-abcdefghijklmnop123456.",
+        }
+    }
+
+
+def test_provider_diagnostics_redact_credentials():
+    error = normalize_provider_exception(ProviderErrorWithSecret(), provider="openai")
+    assert "abcdefghijklmnopqrstuvwxyz" not in (error.provider_message or "")
+    assert "sk-abcdefghijklmnop123456" not in (error.provider_message or "")
+    assert "[redacted]" in (error.provider_message or "")
