@@ -19,8 +19,15 @@ class GeminiProvider(BaseProvider):
         return self.is_configured
 
     def get_capabilities(self):
-        models = [self.settings.gemini_flash_model, self.settings.gemini_advanced_model]
-        if self.settings.default_provider == self.name and self.settings.default_model:
+        models = [self.settings.gemini_primary_model]
+        if self.settings.gemini_advanced_enabled:
+            models.append(self.settings.gemini_advanced_model)
+        if (
+            self.settings.default_provider == self.name
+            and self.settings.default_model
+            and self.settings.default_model not in {"gemini-2.5-flash", "gemini-3.8-flash"}
+            and (self.settings.gemini_advanced_enabled or self.settings.default_model != self.settings.gemini_advanced_model)
+        ):
             models.append(self.settings.default_model)
         return {
             "provider": self.name,
