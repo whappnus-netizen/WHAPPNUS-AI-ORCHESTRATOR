@@ -19,12 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(require_api_key)])
 
 
-async def authorize_tenant(
-    organization_id: str,
-    timestamp: str | None,
-    nonce: str | None,
-    signature: str | None,
-) -> None:
+async def authorize_tenant(organization_id: str, timestamp: str | None, nonce: str | None, signature: str | None) -> None:
     verify_tenant_signature(
         organization_id=organization_id,
         timestamp=timestamp,
@@ -49,21 +44,20 @@ async def completions(
     try:
         result = await Orchestrator(providers, settings).run(body)
     except ProviderError as exc:
-        logger.warning(
-            "provider_request_failed",
-            extra={
-                "request_id": request_id,
-                "provider": exc.provider,
-                "provider_status": exc.status_code,
-                "provider_error_code": exc.provider_error_code,
-                "provider_error_type": exc.provider_error_type,
-                "provider_request_id": exc.provider_request_id,
-                "provider_message": exc.provider_message,
-                "error_code": exc.code,
-                "retryable": exc.retryable,
-                "fallback_allowed": exc.fallback_allowed,
-            },
-        )
+        diagnostic = {
+            "event": "provider_request_failed",
+            "request_id": request_id,
+            "provider": exc.provider,
+            "provider_status": exc.status_code,
+            "provider_error_code": exc.provider_error_code,
+            "provider_error_type": exc.provider_error_type,
+            "provider_request_id": exc.provider_request_id,
+            "provider_message": exc.provider_message,
+            "error_code": exc.code,
+            "retryable": exc.retryable,
+            "fallback_allowed": exc.fallback_allowed,
+        }
+        logger.warning(json.dumps(diagnostic, ensure_ascii=False, separators=(",", ":")))
         detail = {
             "code": exc.code,
             "request_id": request_id,
@@ -76,11 +70,7 @@ async def completions(
             "provider_request_id": exc.provider_request_id,
         }
         status_code = 422 if exc.code == "MODEL_NOT_CONFIGURED" else 413 if exc.code == "CONTEXT_TOO_LARGE" else 503
-        headers = (
-            {"Retry-After": str(exc.retry_after_seconds)}
-            if exc.retry_after_seconds is not None
-            else None
-        )
+        headers = {"Retry-After": str(exc.retry_after_seconds)} if exc.retry_after_seconds is not None else None
         raise HTTPException(status_code=status_code, headers=headers, detail=detail) from exc
 
     return ChatResponse(
