@@ -3,7 +3,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from app.api.schemas.requests import ChatRequest, EstimateRequest, ValidateRequest
 from app.api.schemas.responses import ChatResponse
 from app.core.cost_manager import estimate_cost
@@ -13,19 +13,36 @@ from app.core.orchestrator import Orchestrator
 from app.core.token_manager import estimate_messages_tokens
 from app.dependencies import providers, rate_limiter, settings
 from app.security.authentication import require_api_key
-from app.security.tenant_auth import verify_tenant_signature
+from app.security.tenant_auth import verify_tenant_body_hash, verify_tenant_signature
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(require_api_key)])
 
 
-async def authorize_tenant(organization_id: str, timestamp: str | None, nonce: str | None, signature: str | None) -> None:
+async def authorize_tenant(
+    organization_id: str,
+    timestamp: str | None,
+    nonce: str | None,
+    signature: str | None,
+    body_hash_header: str | None,
+    raw_body: bytes,
+    method: str,
+    path: str,
+) -> None:
+    body_hash = verify_tenant_body_hash(
+        raw_body=raw_body,
+        body_hash=body_hash_header,
+        required=settings.tenant_body_signature_required,
+    )
     verify_tenant_signature(
         organization_id=organization_id,
         timestamp=timestamp,
         nonce=nonce,
         signature=signature,
         secret=settings.tenant_signing_secret.get_secret_value(),
+        body_hash=body_hash,
+        method=method,
+        path=path,
     )
     await rate_limiter.consume_nonce(organization_id, nonce)
     await rate_limiter.enforce(organization_id)
@@ -34,11 +51,22 @@ async def authorize_tenant(organization_id: str, timestamp: str | None, nonce: s
 @router.post("/completions", response_model=ChatResponse)
 async def completions(
     body: ChatRequest,
+    request: Request,
     x_tenant_timestamp: str | None = Header(default=None),
     x_tenant_nonce: str | None = Header(default=None),
     x_tenant_signature: str | None = Header(default=None),
+    x_tenant_body_sha256: str | None = Header(default=None),
 ):
-    await authorize_tenant(body.organization_id, x_tenant_timestamp, x_tenant_nonce, x_tenant_signature)
+    await authorize_tenant(
+        body.organization_id,
+        x_tenant_timestamp,
+        x_tenant_nonce,
+        x_tenant_signature,
+        x_tenant_body_sha256,
+        await request.body(),
+        request.method,
+        request.url.path,
+    )
     started = time.perf_counter()
     request_id = body.request_id or str(uuid.uuid4())
     try:
@@ -89,11 +117,22 @@ async def completions(
 @router.post("/estimate")
 async def estimate(
     body: EstimateRequest,
+    request: Request,
     x_tenant_timestamp: str | None = Header(default=None),
     x_tenant_nonce: str | None = Header(default=None),
     x_tenant_signature: str | None = Header(default=None),
+    x_tenant_body_sha256: str | None = Header(default=None),
 ):
-    await authorize_tenant(body.organization_id, x_tenant_timestamp, x_tenant_nonce, x_tenant_signature)
+    await authorize_tenant(
+        body.organization_id,
+        x_tenant_timestamp,
+        x_tenant_nonce,
+        x_tenant_signature,
+        x_tenant_body_sha256,
+        await request.body(),
+        request.method,
+        request.url.path,
+    )
     tokens = estimate_messages_tokens([m.model_dump() for m in body.messages])
     provider = (body.preferred_provider or settings.default_provider).lower()
     provider_adapter = providers.get(provider)
@@ -138,9 +177,20 @@ async def estimate(
 @router.post("/validate")
 async def validate(
     body: ValidateRequest,
+    request: Request,
     x_tenant_timestamp: str | None = Header(default=None),
     x_tenant_nonce: str | None = Header(default=None),
     x_tenant_signature: str | None = Header(default=None),
+    x_tenant_body_sha256: str | None = Header(default=None),
 ):
-    await authorize_tenant(body.organization_id, x_tenant_timestamp, x_tenant_nonce, x_tenant_signature)
+    await authorize_tenant(
+        body.organization_id,
+        x_tenant_timestamp,
+        x_tenant_nonce,
+        x_tenant_signature,
+        x_tenant_body_sha256,
+        await request.body(),
+        request.method,
+        request.url.path,
+    )
     return {"valid": True, "message_count": len(body.messages)}
