@@ -11,8 +11,7 @@ class Settings(BaseSettings):
     tenant_signing_secret: SecretStr = SecretStr("")
     redis_url: SecretStr = SecretStr("")
     gemini_api_key: SecretStr = SecretStr("")
-    # Gemini 2.5 access is restricted for projects without prior active usage.
-    # 3.8 Flash is the current stable default for new Gemini API integrations.
+    # Use current Gemini model identifiers for new deployments; do not rely on legacy 2.5 model IDs.
     gemini_flash_model: str = "gemini-3.8-flash"
     gemini_advanced_model: str = "gemini-3.1-pro-preview"
     openai_api_key: SecretStr = SecretStr("")
@@ -24,6 +23,7 @@ class Settings(BaseSettings):
     enable_fallback: bool = True
     fallback_provider_order: str = "openai,anthropic"
     request_timeout_seconds: float = Field(default=45, gt=0, le=300)
+    total_request_timeout_seconds: float = Field(default=22, gt=0, le=120)
     max_retries: int = Field(default=2, ge=0, le=5)
     rate_limit_per_minute: int = Field(default=60, ge=1, le=100000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
