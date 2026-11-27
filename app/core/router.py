@@ -10,9 +10,10 @@ def select_candidates(body, registry, settings):
         if isinstance(message.content, list):
             required.update(part.type for part in message.content if part.type != "text")
 
+    # Never probe every configured provider implicitly. Fallback is an explicit allowlist.
     order = [requested]
     if settings.enable_fallback:
-        order += settings.fallback_order + ["gemini", "openai", "anthropic"]
+        order += settings.fallback_order
 
     seen = set()
     candidates = []
@@ -31,11 +32,22 @@ def select_candidates(body, registry, settings):
         elif name == requested and settings.default_model:
             model = settings.default_model
         elif name == "gemini":
-            model = settings.gemini_advanced_model if tier == "advanced" else settings.gemini_flash_model
+            model = (
+                settings.gemini_advanced_model
+                if tier == "advanced" and settings.gemini_advanced_enabled
+                else settings.gemini_primary_model
+            )
         elif name == "openai":
             model = settings.openai_model
         else:
             model = settings.anthropic_model
+
+        if name == "gemini":
+            # Gracefully map legacy agent/model pins to the validated primary model.
+            if model in {"gemini-2.5-flash", "gemini-3.8-flash"}:
+                model = settings.gemini_primary_model
+            if not settings.gemini_advanced_enabled and model == settings.gemini_advanced_model:
+                model = settings.gemini_primary_model
 
         if model not in available_models:
             if name == requested and (body.preferred_model or settings.default_model):

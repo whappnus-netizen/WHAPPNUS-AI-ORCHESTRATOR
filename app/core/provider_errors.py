@@ -26,6 +26,31 @@ def _error_payload(body):
     return nested if isinstance(nested, dict) else {}
 
 
+def _is_quota_exhausted(provider_code: object, provider_type: object, message: str | None) -> bool:
+    code = str(provider_code or "").lower()
+    error_type = str(provider_type or "").lower()
+    text = (message or "").lower()
+    hard_quota_codes = {
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "quota_exceeded",
+        "insufficient_funds",
+    }
+    if code in hard_quota_codes:
+        return True
+    if "credit balance is too low" in text or "insufficient_quota" in text:
+        return True
+    if "limit: 0" in text and ("quota" in text or "free tier" in text):
+        return True
+    # RESOURCE_EXHAUSTED can mean a short per-minute limit, not an exhausted plan.
+    # Only treat it as a hard quota when the daily quota is exhausted or the limit is zero.
+    if code == "resource_exhausted" and "per day" in text and "quota" in text:
+        return True
+    if "exceeded your current quota" in text and ("per day" in text or "limit: 0" in text):
+        return True
+    return error_type == "insufficient_quota"
+
+
 def normalize_provider_exception(exc: Exception, provider: str | None = None) -> ProviderError:
     """Normalize SDK errors while retaining bounded, credential-safe diagnostics."""
     name = type(exc).__name__.lower()
@@ -60,7 +85,18 @@ def normalize_provider_exception(exc: Exception, provider: str | None = None) ->
     retry_after = None
     try:
         raw_retry = headers.get("retry-after")
-        retry_after = min(30.0, max(0.0, float(raw_retry))) if raw_retry is not None else None
+        if raw_retry is not None:
+            retry_after = min(30.0, max(0.0, float(raw_retry)))
+        else:
+            details = body.get("details", [])
+            if isinstance(details, list):
+                for detail in details:
+                    if not isinstance(detail, dict) or not str(detail.get("@type", "")).endswith("RetryInfo"):
+                        continue
+                    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)s\s*", str(detail.get("retryDelay", "")))
+                    if match:
+                        retry_after = min(30.0, max(0.0, float(match.group(1))))
+                        break
     except (TypeError, ValueError, AttributeError):
         retry_after = None
 
@@ -72,6 +108,16 @@ def normalize_provider_exception(exc: Exception, provider: str | None = None) ->
         "provider_message": provider_message,
     }
 
+    if _is_quota_exhausted(provider_code, provider_type, provider_message):
+        return ProviderError(
+            "PROVIDER_QUOTA_EXHAUSTED",
+            "Provider quota or billing balance is exhausted for this model/account.",
+            False,
+            status,
+            None,
+            True,
+            **common,
+        )
     if "ratelimit" in name or status == 429:
         return ProviderError("PROVIDER_RATE_LIMIT", "Provider rate limit reached.", True, status, retry_after, True, **common)
     if "authentication" in name or "permission" in name or status in (401, 403):

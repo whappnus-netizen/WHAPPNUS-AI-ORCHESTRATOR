@@ -6,6 +6,27 @@ class RateLimitError(Exception):
     response = type("Response", (), {"headers": {"retry-after": "7"}})()
 
 
+class QuotaExhaustedError(Exception):
+    status_code = 429
+    body = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "You exceeded your current quota. Quota exceeded for metric; limit: 0; Free Tier.",
+            "details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure"}],
+        }
+    }
+
+
+class InsufficientCreditsError(Exception):
+    status_code = 400
+    body = {
+        "error": {
+            "type": "invalid_request_error",
+            "message": "Your credit balance is too low to access the Anthropic API.",
+        }
+    }
+
+
 class UnauthorizedError(Exception):
     status_code = 401
 
@@ -27,6 +48,21 @@ def test_rate_limit_is_retryable_and_retry_after_is_parsed():
     assert error.retryable is True
     assert error.retry_after_seconds == 7
     assert error.provider == "openai"
+
+
+def test_zero_quota_is_not_retried_but_allows_fallback():
+    error = normalize_provider_exception(QuotaExhaustedError(), provider="gemini")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
+    assert error.fallback_allowed is True
+    assert error.provider_error_code == "RESOURCE_EXHAUSTED"
+
+
+def test_insufficient_provider_credits_are_not_retried():
+    error = normalize_provider_exception(InsufficientCreditsError(), provider="anthropic")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
+    assert error.fallback_allowed is True
 
 
 def test_auth_error_is_not_retried_but_can_fallback():
@@ -51,3 +87,49 @@ def test_model_not_found_is_not_retried_but_allows_fallback():
     assert error.retryable is False
     assert error.fallback_allowed is True
     assert error.provider_request_id == "provider-request-123"
+
+
+class ProviderErrorWithSecret(Exception):
+    status_code = 400
+    body = {
+        "error": {
+            "type": "invalid_request_error",
+            "message": "Rejected request for Bearer abcdefghijklmnopqrstuvwxyz and sk-abcdefghijklmnop123456.",
+        }
+    }
+
+
+def test_provider_diagnostics_redact_credentials():
+    error = normalize_provider_exception(ProviderErrorWithSecret(), provider="openai")
+    assert "abcdefghijklmnopqrstuvwxyz" not in (error.provider_message or "")
+    assert "sk-abcdefghijklmnop123456" not in (error.provider_message or "")
+    assert "[redacted]" in (error.provider_message or "")
+
+
+class MinuteQuotaError(Exception):
+    status_code = 429
+    body = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "Quota exceeded for requests per minute; limit: 1000.",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "12s",
+                }
+            ],
+        }
+    }
+
+
+def test_google_per_minute_quota_remains_retryable_and_parses_retry_info():
+    error = normalize_provider_exception(MinuteQuotaError(), provider="gemini")
+    assert error.code == "PROVIDER_RATE_LIMIT"
+    assert error.retryable is True
+    assert error.retry_after_seconds == 12
+
+
+def test_google_daily_zero_quota_is_not_retryable():
+    error = normalize_provider_exception(QuotaExhaustedError(), provider="gemini")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
