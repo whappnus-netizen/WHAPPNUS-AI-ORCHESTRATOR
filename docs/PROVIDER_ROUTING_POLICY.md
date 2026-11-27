@@ -50,3 +50,8 @@ After validating Gemini Pro access and/or a secondary provider:
 - No provider is attempted as fallback unless it appears in the explicit allowlist.
 - Zero quota and insufficient credits do not trigger retries.
 - Standard 429 rate limits have a bounded retry budget.
+
+
+## Tenant request integrity
+
+The Orchestrator supports HMAC v2, which signs method, path, organization ID, timestamp, nonce and SHA-256 of the exact raw request body. The body hash is verified before nonce consumption and provider invocation. Legacy v1 remains temporarily accepted while TENANT_BODY_SIGNATURE_REQUIRED=false; set the flag to true only after all backend callers have moved to v2. See docs/TENANT_REQUEST_AUTH_V2.md.
