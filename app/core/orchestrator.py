@@ -1,14 +1,16 @@
 import asyncio
 import json
 import time
+
 from app.core.context_manager import fit_context
 from app.core.cost_manager import estimate_cost
 from app.core.errors import NoProviderAvailable, ProviderError
 from app.core.model_limits import model_limits
-from app.core.token_manager import estimate_tokens
 from app.core.router import select_candidates
+from app.core.token_manager import estimate_tokens
 from app.observability.request_metrics import ERRORS, FALLBACKS, LATENCY, REQUESTS
 from app.utils.retries import backoff
+
 
 class Orchestrator:
     def __init__(self, registry, settings):
@@ -18,12 +20,14 @@ class Orchestrator:
         candidates = select_candidates(body, self.registry, self.settings)
         if not candidates:
             raise NoProviderAvailable()
+
         attempted = []
         last_error = None
         for provider, model in candidates:
             breaker = self.registry.breaker(provider.name)
             if breaker.is_open:
                 continue
+
             limits = model_limits(self.settings, provider.name, model)
             try:
                 system_tokens = estimate_tokens(body.system_instructions or "")
@@ -33,6 +37,7 @@ class Orchestrator:
                 messages = fit_context([m.model_dump() for m in body.messages], available_input)
             except ValueError as exc:
                 raise ProviderError("CONTEXT_TOO_LARGE", str(exc), fallback_allowed=False) from exc
+
             output_limit = min(body.max_tokens, limits["max_output_tokens"], self.settings.max_output_tokens)
             for attempt in range(self.settings.max_retries + 1):
                 if provider.name not in attempted:
@@ -40,17 +45,46 @@ class Orchestrator:
                 started = time.perf_counter()
                 try:
                     async with asyncio.timeout(self.settings.request_timeout_seconds):
-                        result = await provider.generate(model=model, messages=messages, system=body.system_instructions, max_tokens=output_limit, temperature=body.temperature)
+                        result = await provider.generate(
+                            model=model,
+                            messages=messages,
+                            system=body.system_instructions,
+                            max_tokens=output_limit,
+                            temperature=body.temperature,
+                        )
+
+                    content = result.get("content")
+                    if not isinstance(content, str) or not content.strip():
+                        raise ProviderError(
+                            "PROVIDER_EMPTY_RESPONSE",
+                            "Provider returned an empty completion.",
+                            retryable=True,
+                            fallback_allowed=True,
+                            provider=provider.name,
+                        )
+
                     LATENCY.labels(provider.name).observe(time.perf_counter() - started)
                     breaker.record_success()
-                    usage = result.get("usage") or {}
+
+                    usage = result.get("usage")
+                    usage = dict(usage) if isinstance(usage, dict) else {}
                     try:
                         pricing = json.loads(self.settings.model_pricing_json or "{}")
                     except (TypeError, ValueError):
                         pricing = {}
+                    if not isinstance(pricing, dict):
+                        pricing = {}
                     rates = pricing.get(f"{provider.name}:{model}", pricing.get(model, {}))
-                    usage["estimated_cost"] = estimate_cost(usage.get("input_tokens"), usage.get("output_tokens"), rates)
-                    usage["currency"] = self.settings.pricing_currency if usage["estimated_cost"] is not None else None
+                    if not isinstance(rates, dict):
+                        rates = {}
+                    estimated_cost = estimate_cost(
+                        usage.get("input_tokens"),
+                        usage.get("output_tokens"),
+                        rates,
+                    )
+                    usage["estimated_cost"] = estimated_cost
+                    usage["currency"] = self.settings.pricing_currency if estimated_cost is not None else None
+
                     result["usage"] = usage
                     result["fallback_used"] = len(attempted) > 1
                     result["fallback_chain"] = attempted.copy()
@@ -58,10 +92,18 @@ class Orchestrator:
                     if result["fallback_used"]:
                         FALLBACKS.inc()
                     return result
+
                 except TimeoutError:
-                    error = ProviderError("PROVIDER_TIMEOUT", "Provider request timed out.", True)
+                    error = ProviderError(
+                        "PROVIDER_TIMEOUT",
+                        "Provider request timed out.",
+                        retryable=True,
+                        fallback_allowed=True,
+                        provider=provider.name,
+                    )
                 except ProviderError as exc:
                     error = exc
+
                 LATENCY.labels(provider.name).observe(time.perf_counter() - started)
                 last_error = error
                 ERRORS.labels(provider.name, error.code).inc()
@@ -74,6 +116,7 @@ class Orchestrator:
                     REQUESTS.labels(provider.name, "error").inc()
                     raise error
                 break
+
         if last_error:
             raise last_error
         raise NoProviderAvailable()
