@@ -121,7 +121,10 @@ class Orchestrator:
                 ERRORS.labels(provider.name, error.code).inc()
                 if error.retryable:
                     breaker.record_failure()
-                    if attempt < self.settings.max_retries and time.monotonic() < deadline:
+                    retry_limit = self.settings.max_retries
+                    if error.code == "PROVIDER_RATE_LIMIT":
+                        retry_limit = min(retry_limit, self.settings.max_rate_limit_retries)
+                    if attempt < retry_limit and time.monotonic() < deadline:
                         await backoff(attempt, retry_after=error.retry_after_seconds)
                         continue
                 if not error.fallback_allowed:
