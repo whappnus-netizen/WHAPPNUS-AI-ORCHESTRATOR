@@ -125,8 +125,16 @@ class Orchestrator:
                     if error.code == "PROVIDER_RATE_LIMIT":
                         retry_limit = min(retry_limit, self.settings.max_rate_limit_retries)
                     if attempt < retry_limit and time.monotonic() < deadline:
-                        await backoff(attempt, retry_after=error.retry_after_seconds)
+                        remaining = max(0.0, deadline - time.monotonic())
+                        await backoff(
+                            attempt,
+                            retry_after=error.retry_after_seconds,
+                            max_wait_seconds=remaining,
+                        )
                         continue
+                if time.monotonic() >= deadline:
+                    REQUESTS.labels(provider.name, "error").inc()
+                    raise error
                 if not error.fallback_allowed:
                     REQUESTS.labels(provider.name, "error").inc()
                     raise error
