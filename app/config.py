@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Gemini 2.5 access is restricted for projects without prior active usage.
     # 3.8 Flash is the current stable default for new Gemini API integrations.
     gemini_flash_model: str = "gemini-3.8-flash"
-    gemini_advanced_model: str = "gemini-3.8-flash"
+    gemini_advanced_model: str = "gemini-3.1-pro-preview"
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     anthropic_api_key: SecretStr = SecretStr("")
