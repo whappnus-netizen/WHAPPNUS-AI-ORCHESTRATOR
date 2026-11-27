@@ -4,9 +4,9 @@ from app.core.errors import ProviderError
 
 
 _SECRET_PATTERNS = (
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/-]+=*"),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
+    re.compile(r"(?i)bearer\\s+[A-Za-z0-9._~+/-]+=*"),
+    re.compile(r"\\bsk-[A-Za-z0-9_-]{12,}\\b"),
+    re.compile(r"\\bAIza[0-9A-Za-z_-]{20,}\\b"),
 )
 
 
@@ -24,6 +24,28 @@ def _error_payload(body):
         return {}
     nested = body.get("error", body)
     return nested if isinstance(nested, dict) else {}
+
+
+def _is_quota_exhausted(provider_code: object, provider_type: object, message: str | None) -> bool:
+    code = str(provider_code or "").lower()
+    error_type = str(provider_type or "").lower()
+    text = (message or "").lower()
+    hard_quota_codes = {
+        "resource_exhausted",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "quota_exceeded",
+        "insufficient_funds",
+    }
+    if code in hard_quota_codes:
+        return True
+    if "credit balance is too low" in text or "insufficient_quota" in text:
+        return True
+    if "limit: 0" in text and ("quota" in text or "free tier" in text):
+        return True
+    if "exceeded your current quota" in text and "rate limit" not in text:
+        return True
+    return error_type == "insufficient_quota"
 
 
 def normalize_provider_exception(exc: Exception, provider: str | None = None) -> ProviderError:
@@ -72,6 +94,16 @@ def normalize_provider_exception(exc: Exception, provider: str | None = None) ->
         "provider_message": provider_message,
     }
 
+    if _is_quota_exhausted(provider_code, provider_type, provider_message):
+        return ProviderError(
+            "PROVIDER_QUOTA_EXHAUSTED",
+            "Provider quota or billing balance is exhausted for this model/account.",
+            False,
+            status,
+            None,
+            True,
+            **common,
+        )
     if "ratelimit" in name or status == 429:
         return ProviderError("PROVIDER_RATE_LIMIT", "Provider rate limit reached.", True, status, retry_after, True, **common)
     if "authentication" in name or "permission" in name or status in (401, 403):
