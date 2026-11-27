@@ -1,54 +1,26 @@
 # WHAPPNUS AI ORCHESTRATOR
 
-Independent multi-provider AI orchestration service for the WHAPPNUS SaaS platform.
+Independent multi-provider orchestration service for WHAPPNUS. No Ollama, local model runtime or dependency on the legacy router.
 
-## Current status
+## Stack and modules
 
-Foundation branch: `feat/orchestrator-foundation`.
+- Python 3.12, FastAPI, Pydantic Settings.
+- Official Gemini, OpenAI and Anthropic SDK adapters.
+- Configurable provider/model IDs, per-model token budgets and fallback order.
+- Capability-aware text/image/audio/PDF routing: images across all three providers, audio on Gemini, PDF on Gemini and Anthropic.
+- Redis-backed organization quotas and one-time HMAC nonce protection.
+- Provider-specific error normalization, bounded retries, Retry-After, fallback and circuit breakers.
+- Configurable cost estimates; prices are never guessed.
+- Prometheus metrics, Docker and Railway deployment support.
 
-This is an active build, not a production-ready release. The initial commit establishes the FastAPI application, request/response contracts, Gemini/OpenAI/Anthropic adapter boundaries, deterministic routing, basic fallback, server-to-server API-key authentication, Docker/Railway configuration and initial tests.
+## API
 
-## Stack
+- `GET /health`, `GET /ready`.
+- `GET /v1/providers`, `GET /v1/providers/health`, `GET /v1/metrics`.
+- `POST /v1/chat/completions`, `/estimate`, `/validate`.
 
-- Python 3.12
-- FastAPI + Pydantic Settings
-- Official Google GenAI, OpenAI and Anthropic SDKs
-- Pytest and Ruff
-- Docker; Railway-compatible dynamic `PORT`
+All versioned routes require `X-Orchestrator-Key`. Tenant-scoped routes also require timestamp, nonce and HMAC signature headers. See `docs/INTEGRATION_WHAPPNUS.md`.
 
-## Quick start
+## Production gate
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env
-# Set ORCHESTRATOR_API_KEY and at least one provider API key in .env
-uvicorn app.main:app --reload
-```
-
-API docs: `http://localhost:8000/docs`.
-
-## Routes
-
-- `GET /health` (public liveness)
-- `GET /ready` (provider readiness summary)
-- `GET /v1/providers`
-- `GET /v1/providers/health`
-- `POST /v1/chat/completions`
-- `POST /v1/chat/estimate`
-- `POST /v1/chat/validate`
-
-All `/v1/*` routes require `X-Orchestrator-Key`.
-
-## Configuration
-
-See `.env.example`. Provider credentials are optional at startup. Providers without credentials are reported as unavailable; no simulated completions are returned. Model identifiers are environment-configurable.
-
-## Important production gaps
-
-The current foundation is not yet approved for production. Distributed rate limiting, tenant-scoped quotas, circuit breakers, precise provider error classification, bounded retries/backoff, token-aware context management, cost accounting, structured tracing/metrics, multimodal content contracts and comprehensive security tests remain future implementation work. The initial adapters are text-only and must not be treated as proof of vision/audio/PDF support.
-
-## Architecture and integration
-
-See `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/PROVIDERS.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md` and `docs/INTEGRATION_WHAPPNUS.md`.
+The code and Docker image are being validated in CI. The service is not approved for customer traffic until Railway secrets are configured, WHAPPNUS implements the signed tenant contract, and live smoke tests are run against the selected provider accounts. SDK payload tests are not the same as paid live-provider acceptance tests.
