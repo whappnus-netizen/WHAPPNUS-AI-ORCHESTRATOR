@@ -104,3 +104,32 @@ def test_provider_diagnostics_redact_credentials():
     assert "abcdefghijklmnopqrstuvwxyz" not in (error.provider_message or "")
     assert "sk-abcdefghijklmnop123456" not in (error.provider_message or "")
     assert "[redacted]" in (error.provider_message or "")
+
+
+class MinuteQuotaError(Exception):
+    status_code = 429
+    body = {
+        "error": {
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "Quota exceeded for requests per minute; limit: 1000.",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "12s",
+                }
+            ],
+        }
+    }
+
+
+def test_google_per_minute_quota_remains_retryable_and_parses_retry_info():
+    error = normalize_provider_exception(MinuteQuotaError(), provider="gemini")
+    assert error.code == "PROVIDER_RATE_LIMIT"
+    assert error.retryable is True
+    assert error.retry_after_seconds == 12
+
+
+def test_google_daily_zero_quota_is_not_retryable():
+    error = normalize_provider_exception(QuotaExhaustedError(), provider="gemini")
+    assert error.code == "PROVIDER_QUOTA_EXHAUSTED"
+    assert error.retryable is False
