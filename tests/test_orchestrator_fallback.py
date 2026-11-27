@@ -2,6 +2,7 @@ from app.api.schemas.requests import ChatRequest
 from app.config import Settings
 from app.core.errors import ProviderError
 from app.core.orchestrator import Orchestrator
+from app.core.router import select_candidates
 
 
 class FakeProvider:
@@ -13,7 +14,7 @@ class FakeProvider:
 
     def get_capabilities(self):
         models = {
-            "gemini": ["gemini-3.8-flash"],
+            "gemini": ["gemini-3.8-flash", "gemini-3.1-pro-preview"],
             "openai": ["gpt-4.1-mini"],
             "anthropic": ["claude-sonnet-4-5"],
         }
@@ -52,6 +53,27 @@ def request():
         messages=[{"role": "user", "content": "Olá"}],
     )
 
+
+
+def test_simple_task_selects_gemini_flash_model():
+    settings = Settings(_env_file=None, gemini_api_key="configured")
+    registry = FakeRegistry([FakeProvider("gemini")])
+    body = request()
+    candidates = select_candidates(body, registry, settings)
+    assert candidates[0][1] == "gemini-3.8-flash"
+
+
+def test_complex_task_selects_distinct_gemini_advanced_model():
+    settings = Settings(_env_file=None, gemini_api_key="configured")
+    registry = FakeRegistry([FakeProvider("gemini")])
+    body = ChatRequest(
+        organization_id="org-test",
+        preferred_provider="gemini",
+        task_type="complex",
+        messages=[{"role": "user", "content": "Analisa detalhadamente esta situação."}],
+    )
+    candidates = select_candidates(body, registry, settings)
+    assert candidates[0][1] == "gemini-3.1-pro-preview"
 
 async def test_auth_failure_falls_back_to_another_provider():
     settings = Settings(_env_file=None, gemini_api_key="configured", openai_api_key="configured", max_retries=0, fallback_provider_order="openai")
